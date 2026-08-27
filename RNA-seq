@@ -98,3 +98,5 @@ ggplot(df[1:10,], aes(x = LCS, y = reorder(Term, LCS),
     axis.text.x = element_text(size = 10)
   )
 
+
+
