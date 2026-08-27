@@ -1,0 +1,22 @@
+for f in *_1.fastq.gz; do bwa mem -5SP -T0 -t16 ~/hichip/bwa_index/hg19.only25.fa $f ${f/_1.fastq.gz/_2.fastq.gz} | pairtools parse --min-mapq 40 --walks-policy 5unique --max-inter-align-gap 30 --nproc-in 8 --nproc-out 8 --chroms-path ~/hichip/hg19.only25.genome | pairtools sort --tmpdir=/media/qi/Elements/temp --nproc 16|pairtools dedup --nproc-in 8 --nproc-out 8 --mark-dups --output-stats ${f/_1.fastq.gz/.stats.txt} | pairtools split --nproc-in 8 --nproc-out 8 --output-pairs ${f/_1.fastq.gz/.mapped.pairs} --output-sam - |samtools view -bS -@ 16 | samtools sort -@16 -o ${f/_1.fastq.gz/.mapped.PT.bam};samtools index ${f/_1.fastq.gz/.mapped.PT.bam}; done
+
+#QC report
+python3 ~/hichip/HiChiP/get_qc.py -p SRR18609940.stats.txt
+requirement: A library prepared from a mammalian sample to be acceptable if: - Mapped nondupe pairs cis > 1,000 bp is greater than 20% of the total mapped No-Dup pairs.
+*ChIP enrichment stats
+~/hichip/HiChiP/enrichment_stats.sh -g ~/hichip/hg19.only25.genome -b SRR18609941.mapped.PT.bam -p /media/qi/Elements/sk/hichip/A12.rmbl.p15.bed -t 16 -x SRR18609941.h3k27ac &
+python3 ~/hichip/HiChiP/plot_chip_enrichment.py -bam SRR18609941.mapped.PT.bam -peaks /media/qi/Elements/sk/hichip/A12.rmbl.p5.bed -output SRR18609941.enrichment.png &
+python3 ~/hichip/HiChiP/plot_chip_enrichment_bed.py -bam SRR18609940.mapped.PT.bam -peaks /media/qi/Elements/sk/hichip/A12.rmbl.p15-3.bed -output SRR18609940-3.png &
+requirement: Total reads in 1000 bp around center of peaks is recommended to be >2% (shallow seq, 20M reads OR deep seq, 100-200 M reads)
+for f in *.bam; do bamCoverage -b $f --normalizeUsing RPKM -o ${f/.bam/.bw}; done
+Good IP – exhibit distinct signals of sharply increased coverage from a low background indicating the location of the protein-DNA binding Site. (Poor IP – exhibit no or weak coverage increases and are often accompanied by an elevated background signal.)
+#QC end
+
+#Generating .hic file
+java -Xmx48000m  -Djava.awt.headless=true -jar ~/hichip/HiChiP/juicertools.jar pre --threads 16 SRR14294873.mapped.pairs.gz SRR14294873.hic ~/hichip/hg19.only25.genome
+
+# HiChIP Loop calling
+for f in *.mapped.pairs.gz; do zcat $f | grep -v '#' | awk -F"\t" '{print $1"\t"$2"\t"$3"\t"$6"\t"$4"\t"$5"\t"$7}' | gzip -c >${f/.mapped.pairs.gz/.hicpro.pairs.gz}; done
+for f in *.hicpro.pairs.gz; do pairix $f; done
+bash ~/hic/FitHiChIP/FitHiChIP_HiCPro.sh -C /media/qi/Elements/sk/hichip/VCaP/test/SRR14294873.config.txt
+#WASHU genome browser for loop visualization
