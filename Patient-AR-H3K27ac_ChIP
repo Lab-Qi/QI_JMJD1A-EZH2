@@ -1,0 +1,11 @@
+#Normalized BW files were downloaded from GSE130408
+
+bigwigAverage -b *.bw -o AR-crpc1-avg.bw
+computeMatrix reference-point -S ar-primary-avg.bw AR-crpc1-avg.bw AR-crpc2-avg.bw -R shcon_top2000.bed --referencePoint center -b 2000 -a 2000 --skipZeros -o AR-primary-crpc.gz &
+plotHeatmap -m AR-primary-crpc1-crpc2.gz --colorMap Blues --legendLocation none -out AR-primary-crpc1-crpc2-heatmap.png &
+plotProfile -m AR-primary-crpc1-crpc2.gz -out AR-primary-crpc1-crpc2-profile.png --perGroup --refPointLabel 0 --samplesLabel Primary CRPC1 CRPC2 &
+annotatePeaks.pl shcon_ar.p15.rmbl.bed hg19 -size 200 -bedGraph *.bedGraph > all_ar_peaks.txt &
+multiBigwigSummary BED-file -b *.bw -o AR-primary-crpc.top2000.npz --BED shcon_top2000.bed --smartLabels --outRawCounts AR-primary-crpc.top2000.txt
+plotCorrelation -in h3k27ac-primary-crpc.top1500.npz --corMethod spearman --skipZeros --plotTitle "Corrletation Primary vs CPRC" --whatToPlot heatmap --colorMap RdYlBu --plotNumbers -o h3k27ac-primary-crpc-heatmap.top1500.png --outFileCorMatrix h3k27ac-primary-crpc.top1500.tab
+plotCorrelation -in ar-primary-crpc.npz --corMethod spearman --skipZeros --plotTitle "Corrletation Primary vs CPRC" --whatToPlot scatterplot -o ar-primary-crpc-scatterplot.png
+plotPCA -in AR-primary-crpc.top2000.npz -o ar-primary-crpc.top2000.png --outFileNameData pca_values_top2000.txt
