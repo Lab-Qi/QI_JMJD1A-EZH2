@@ -1,1 +1,17 @@
-
+fastqc *.fq.gz
+for f in *_1.fq.gz; do trim_galore --paired --cores 6 $f  ${f/_1.fq.gz/_2.fq.gz}  -q 28 --phred33 --illumina --fastqc; done
+**Making index file
+# Merge all E. coli reference genomes into one genomes.fna file
+cat ref_genomes/ecoli/*.fna > genomes.fna
+# create bowtie2 index database (database name: ecoli)
+bowtie2-build genomes.fna ecoli
+# use 'inspect' to check the content of your database
+bowtie2-inspect -n ecoli
+for f in *_1_val_1.fq.gz; do bowtie2 -p 15 --dovetail --phred33 -x ~/sk/Bowtie2Index_hg19/genome -1 $f -2 ${f/_1_val_1.fq.gz/_2_val_2.fq.gz} | samtools view -bS -> ${f/_1_val_1.fq.gz/.bam}; done
+for f in *_1_val_1.fq.gz; do bowtie2 -p 15 --dovetail --phred33 -x ~/sk/Bowtie2Index_e.coli/genome -1 $f -2 ${f/_1_val_1.fq.gz/_2_val_2.fq.gz} | samtools view -bS -> ${f/_1_val_1.fq.gz/.ecoli.bam}; done
+for f in *.bam; do picard SortSam -I $f -O ${f/.bam/.sort.bam} -SO coordinate; done
+for f in *.sort.bam; do picard MarkDuplicates -I $f -O ${f/.sort.bam/.rmdup.bam} -M ${f/.sort.bam/.txt} --REMOVE_DUPLICATES true; done
+for f in *.rmdup.bam; do samtools index $f; done
+bamCoverage --scaleFactor XXX -b A1_CKDL230022361-1A_225W3TLT3_L3.rmdup.bam -o H3K27ac-shCon-1.bw &
+bamCoverage --scaleFactor XXX -b A1_CKDL230022361-1A_225W3TLT3_L3.rmdup.bam -o H3K27ac-shCon-1.bedgraph -of bedgraph &
+for f in *.bedgraph; do macs2 bdgcmp -t $f -c IgG.bedgraph -m ppois -p 2 -o ${f/.bedgraph/.pvalue.bedgraph}; done
