@@ -1,0 +1,100 @@
+fastqc *fq.gz
+for f in *_1.fq.gz; do trimmomatic PE -threads 4 $f ${f/_1.fq.gz/_2.fq.gz} $f.trim.fq.gz $f.un.trim.fq.gz ${f/_1.fq.gz/_2.fq.gz}.trim.fq.gz ${f/_1.fq.gz/_2.fq.gz}.un.trim.fq.gz \
+                LEADING:5 MINLEN:36 TRAILING:10 ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads; done
+fastqc *trim.fq.gz
+for f in *_1.fq.gz.trim.fq.gz; do hisat2 --dta -x ~/sk/hisat2index_hg19/genome -1 $f -2 ${f/_1.fq.gz.trim.fq.gz/_2.fq.gz.trim.fq.gz} -S ${f/_1.fq.gz.trim.fq.gz/.sam} --summary-file {f/_1.fq.gz.trim.fq.gz/.txt}; done
+featureCounts -T 4 -p -t exon -g gene_id \ --extraAttributes gene_id,gene_type,gene_name \ -a /sk/hg19.gtf \ -o featurecounts.txt \ *.bam
+
+#DEanalysis
+countData = read.csv( file = "~/Desktop/gene_count_matrix.csv", header = T, row.names=1)
+head(countData)
+colSums(countData)
+boxplot(countData)
+gr <- factor(c(rep("EZH2kd",3),rep("shCon",3)) )
+colData <-data.frame(group=gr, type="paired-end")
+cds<- DESeqDataSetFromMatrix(countData, colData, design= ~group)
+cds=DESeq(cds)
+cnt <-counts(cds, normalized = T)
+head(cnt)
+boxplot(cnt)
+write.csv(cnt, file = "~/Desktop/EZH2sh1-c42-cnt.csv")
+diff<- results(cds, c("group","EZH2kd","shCon"))
+head(diff)
+diff<-data.frame(results(cds, c("group","EZH2kd","shCon")))
+diff$padj<-p.adjust(diff$pvalue, method = "BH")
+write.csv(diff, file = "~/Desktop/EZH2sh1-c42-DE.csv")
+
+#VOLCANO PLOT#
+DE <-read.csv("~/RNA_Seq/EZH2/EZH2_DE.csv")
+colnames (DE)
+dim (DE)
+DE$exp <- "NS"
+DE$exp[DE$log2FoldChange > 0.25 & DE$padj < 0.05] <- "UPREGULATED"
+DE$exp[DE$log2FoldChange < -0.25 & DE$padj < 0.05] <- "DOWNREGULATED"
+UP <- subset(DE, exp == "UPREGULATED")
+nonsig <- subset(DE, exp == "NS")
+DOWN <- subset(DE, exp == "DOWNREGULATED")
+write.csv(UP, file = "~/RNA_Seq/EZH2/EZH2_upregulated_f0.25_p0.05.csv")
+write.csv(DOWN, file = "~/RNA_Seq/EZH2/EZH2_downregulated_f_0.25_p0.05.csv")
+write.csv(nonsig, file = "~/RNA_Seq/EZH2/EZH2_nonsignificant_f0.25_p0.05.csv")
+cntfrq <- count(DE, exp)
+ggplot(cntfrq, aes(x = exp, y = n, fill = exp)) +
+  geom_col(width = 0.5) +
+  geom_text(aes(label = n), vjust = 0, size = 2.5) +
+  scale_y_break(c(1500, 63000)) +
+  scale_fill_manual(values = c("DOWNREGULATED" = "lightblue", "NS" = "grey", "UPREGULATED" = "red"), guide = "none") +
+  labs(title = "Gene Expression Profile of EZH2_f0.25_p0.05 KD",
+     x = "Frequency",
+     y = "Gene expression") +
+  theme(panel.background = element_rect(fill = "white"),
+        axis.line = element_line(color="black", size = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank())
+
+
+colr <- c("UPREGULATED" = "red", "DOWNREGULATED" = "lightblue", "NS" = "grey")
+ggplot(data=DE,aes(x = log2FoldChange, y = -log10(padj), col = exp)) +
+  geom_point(size = 1) +
+  theme_minimal() +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") + 
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed") +
+  scale_colour_manual(values = colr) +
+  scale_x_continuous(breaks = c(seq(-10, 10, 2)), limits = c(-10, 10)) +
+  scale_y_continuous(breaks = c(seq(0, 50, 3)), limits = c(0, 50)) +
+  labs(title = "Gene Expression Profile of EZH2__f0.25_p0.05 KD",
+       x = "log2(fold change)",
+       y = "-log10(adjusted P-value)",
+       colour = "Expression") +
+  theme_bw() +
+  theme(panel.border = element_rect(colour = "black", fill = NA, size= 0.5),    
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.key.size = unit(0.25, 'cm'),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=7))
+
+
+#dotplot
+
+df <- data.frame(read.table("~/Desktop/e.txt", header=TRUE, sep = "\t"))
+df <- df[complete.cases(df$LCS, df$Odds.Ratio, df$P.value), ]
+ggplot(df[1:10,], aes(x = LCS, y = reorder(Term, LCS), 
+                      color = P.value, size = Odds.Ratio)) + 
+  geom_point(stat = 'identity') +
+  scale_color_gradientn(
+    colours = rainbow(3),              
+    limits = c(0, 0.05),                
+    oob = scales::squish) +             
+  
+  xlab("log (Combined Score)") + 
+  ylab("Pathway") + 
+  ggtitle("MSigDB Hallmark 2020") + 
+  labs(size = "Odds Ratio") + 
+  theme_bw() +
+  xlim(0.4,1.6) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10)
+  )
+
