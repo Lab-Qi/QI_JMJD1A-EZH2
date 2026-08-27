@@ -15,3 +15,44 @@ for f in *.rmdup.bam; do samtools index $f; done
 bamCoverage --scaleFactor XXX -b A1_CKDL230022361-1A_225W3TLT3_L3.rmdup.bam -o H3K27ac-shCon-1.bw &
 bamCoverage --scaleFactor XXX -b A1_CKDL230022361-1A_225W3TLT3_L3.rmdup.bam -o H3K27ac-shCon-1.bedgraph -of bedgraph &
 for f in *.bedgraph; do macs2 bdgcmp -t $f -c IgG.bedgraph -m ppois -p 2 -o ${f/.bedgraph/.pvalue.bedgraph}; done
+macs2 bdgpeakcall -i EZH2-shCon-1.pvalue.bedgraph -c 5 -l 150 -g 150 -o EZH2-shCon-1.p5.bed &
+for f in *.bed; do sort -k8,8nr $f > ${f/.bed/.sort.bed}; done
+for f in *1.p5.bed; do
+    sample1=$f sample2=${f/1.p5.bed/2.p5.bed} idr --samples $sample1 $sample2  --input-file-type bed --rank score --output-file ${f/1.p5.bed/.idr.bed} --plot --log-output-file ${f/1.p5.bed/.idr.log} &
+done
+for f in *.idr.bed; do bedtools intersect -v -abam $f -b ~/sk/hg19.blacklist.bed > ${f/.idr.bed/.rmbl.p6.bed}; done
+
+#ChIPpeakanno
+library(ChIPpeakAnno)
+library(GenomicRanges)
+library(GenomeInfoDb)
+data1 <- read.table("../../sk/C42/EZH2-shcon.rmbl.bed",sep="\t")
+data1 <- data1[,1:5]
+colnames(data1) <- c("chr", "start", "end", "x1", "score")
+gr1 <- toGRanges(data1, format="BED", header=FALSE, skip=3)
+data2 <- read.table("../../sk/C42/JMJD1A-shcon.rmbl.bed",sep="\t")
+data2 <- data2[,1:5]
+colnames(data2) <- c("chr", "start", "end", "x1", "score")
+gr2 <- toGRanges(data2, format="BED", header=FALSE, skip=3)
+ol <- findOverlapsOfPeaks(gr1,gr2, connectedPeaks="keepAll")
+ol <- addMetadata(ol, colNames="score", FUN=mean)
+makeVennDiagram(ol, fill=c("#66ccff", "#66cc00"), # circle fill color
+                col=c("#66ccff", "#66cc00"), #circle border color
+                cat.col=c("#66ccff", "#66cc00")) # label color, keep same as circle border color
+write.table(ol$peaklist$gr1, file="../../new_analysis/JMJD1A_enriched.txt", sep="\t", quote=F, row.names=F, col.names=F)
+write.table(ol$peaklist$`gr1///gr2`, file="../../new_analysis/common.txt", sep="\t", quote=F, row.names=F, col.names=F)
+write.table(ol$peaklist$gr2, file="../../new_analysis/EZH2_enriched.txt", sep="\t", quote=F, row.names=F, col.names=F)
+
+#Annotation of Peaks [homer]
+for f in *.bed; do annotatePeaks.pl $f hg19 -annStats > ${f/.bed/.anno.txt}; done
+annotatePeaks.pl shcon_enrich.bed hg19 -size 200 -bedGraph F2.bdg F3.bdg F5.bdg F6.bdg > quantified_JMJD1Asignal.txt &
+for f in *.anno.txt; do findMotifsGenome.pl $f hg19 ${f/.anno.txt/} -size 200 -p 4; done
+
+#Providing Heatmaps
+computeMatrix reference-point -S E1.bw E2.bw E3.bw E4.bw -R promoter.bed enhancer.bed --referencePoint center -b 2000 -a 2000 --skipZeros -o promoter-enhancer.gz &
+plotHeatmap -m promoter-enhancer.gz --colorMap Blues --legendLocation none -out promoter-enhancer.png &
+plotProfile -m promoter-enhancer.gz.gz -out promoter-enhancer-profile.png --perGroup --refPointLabel 0 &
+
+
+
+
